@@ -15,11 +15,11 @@ static double cpu_sum(const float* arr, int N) {
     return s;
 }
 
-static void run_test(int N) {
-    int numsms = 0;
-    cudaDeviceGetAttribute(&numsms, cudaDevAttrMultiProcessorCount, 0);
+static void run_test(int N, int numsms) {
     const int blockSize = 256;
-    int numBlocks = 2 * numsms; 
+    int numBlocks = numsms * 2;
+    int maxBlocks = (N + blockSize - 1) / blockSize;
+    if (numBlocks > maxBlocks) numBlocks = maxBlocks;
 
     float* h_input = new float[N];
     fill_input(h_input, N);
@@ -53,7 +53,12 @@ int main() {
     printf("=== Reduction Correctness Tests ===\n");
     // edge cases: single element, warp boundary, sub-warp, block boundary, sub-block, max single block
     const int sizes[] = {1, 32, 31, 256, 255, 1024, 1 << 20};
+
+    cudaDeviceProp prop;
+    CUDA_CHECK(cudaGetDeviceProperties(&prop, 0));
+    int numsms = prop.multiProcessorCount;
+
     for (int N : sizes)
-        run_test(N);
+        run_test(N, numsms);
     return 0;
 }
