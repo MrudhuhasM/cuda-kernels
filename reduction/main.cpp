@@ -1,8 +1,8 @@
 #include <iostream>
-#include <cuda_runtime.h>
-#include "reduction.cuh"
 #include <cmath>
 #include <chrono>
+#include "reduction.cuh"
+#include "cuda_check.cuh"
 
 
 void fill_array(float *array, int size) {
@@ -29,22 +29,33 @@ int main(){
 
     int N = 1 << 20; // 1M elements
 
-    int threads_per_block = 256;
-    int blocks_per_grid = (N + threads_per_block - 1) / threads_per_block;
+    int deviceCount = 0;
+    cudaGetDeviceCount(&deviceCount);
+    
+    int numsms = 0;
+    cudaDeviceProp prop;
+    cudaGetDeviceProperties(&prop, 0);
+    numsms = prop.multiProcessorCount;
+
+    int blockSize = 256;
+    int numBlocks = numsms * 2; // 2 blocks per SM for good occupancy
+    if (numBlocks > (N + blockSize - 1) / blockSize) {
+        numBlocks = (N + blockSize - 1) / blockSize;
+    }
 
     
     float *h_input = new float[N];
-    float *h_output = new float[blocks_per_grid];
+    float *h_output = new float[numBlocks];
 
     float *d_input, *d_output;
 
-    cudaMalloc(&d_input, N * sizeof(float));
-    cudaMalloc(&d_output, blocks_per_grid * sizeof(float));
+    CUDA_CHECK(cudaMalloc(&d_input,  N        * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&d_output, numBlocks * sizeof(float)));
 
     fill_array(h_input, N);
-    cudaMemcpy(d_input, h_input, N * sizeof(float), cudaMemcpyHostToDevice);
-    reduceSum(d_input, d_output, N);
-    cudaMemcpy(h_output, d_output, blocks_per_grid * sizeof(float), cudaMemcpyDeviceToHost);
+    CUDA_CHECK(cudaMemcpy(d_input, h_input, N * sizeof(float), cudaMemcpyHostToDevice));
+    reduceSum(numBlocks, blockSize, d_input, d_output, N);  // syncs internally
+    CUDA_CHECK(cudaMemcpy(h_output, d_output, numBlocks * sizeof(float), cudaMemcpyDeviceToHost));
 
     if (check_result(h_input, h_output, N)) {
         std::cout << "Reduction successful! Result: " << h_output[0] << std::endl;

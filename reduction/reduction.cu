@@ -1,6 +1,6 @@
 
 #include <cuda_runtime.h>
-#include <cstdio>
+#include "cuda_check.cuh"
 
 
 __device__ float warpReduceSum(float val) {
@@ -57,63 +57,12 @@ __global__ void reduceFinalKernel(float* __restrict__ data, int size) {
     }
 }
 
-void reduceSum(const float* input, float* output, int size) {
-    
-    int deviceCount = 0;
-    cudaGetDeviceCount(&deviceCount);
-    
-    int numsms = 0;
-    cudaDeviceProp prop;
-    cudaGetDeviceProperties(&prop, 0);
-    numsms = prop.multiProcessorCount;
-
-    int blockSize = 256;
-    int numBlocks = numsms * 2; // 2 blocks per SM for good occupancy
-    if (numBlocks > (size + blockSize - 1) / blockSize) {
-        numBlocks = (size + blockSize - 1) / blockSize;
-    }
-
-    cudaEvent_t startK1, stopK1, startK2, stopK2;
-    cudaEventCreate(&startK1);
-    cudaEventCreate(&stopK1);
-    cudaEventCreate(&startK2);
-    cudaEventCreate(&stopK2);
-
-    
-    const int warmupRuns = 3;
-    for (int w = 0; w < warmupRuns; ++w) {
-        reduceSumKernel<<<numBlocks, blockSize>>>(input, output, size);
-        if (numBlocks > 1) {
-            reduceFinalKernel<<<1, blockSize>>>(output, numBlocks);
-        }
-        cudaDeviceSynchronize();
-    }
-
-    
-    cudaEventRecord(startK1);
+void reduceSum(const int numBlocks, const int blockSize, const float* input, float* output, int size) {
     reduceSumKernel<<<numBlocks, blockSize>>>(input, output, size);
-    cudaEventRecord(stopK1);
-    cudaEventSynchronize(stopK1);
-
-    float ms1 = 0.0f;
-    cudaEventElapsedTime(&ms1, startK1, stopK1);
-    printf("[Kernel 1 - reduceSumKernel]  blocks=%d  time=%.3f ms\n", numBlocks, ms1);
-
-    
+    CUDA_CHECK(cudaGetLastError());
     if (numBlocks > 1) {
-        cudaEventRecord(startK2);
         reduceFinalKernel<<<1, blockSize>>>(output, numBlocks);
-        cudaEventRecord(stopK2);
-        cudaEventSynchronize(stopK2);
-
-        float ms2 = 0.0f;
-        cudaEventElapsedTime(&ms2, startK2, stopK2);
-        printf("[Kernel 2 - reduceFinalKernel] blocks=1   time=%.3f ms\n", ms2);
-        printf("[Total kernel time]                         %.3f ms\n", ms1 + ms2);
+        CUDA_CHECK(cudaGetLastError());
     }
-
-    cudaEventDestroy(startK1);
-    cudaEventDestroy(stopK1);
-    cudaEventDestroy(startK2);
-    cudaEventDestroy(stopK2);
+    CUDA_CHECK(cudaDeviceSynchronize());
 }
