@@ -13,7 +13,7 @@ __device__ float warpReduceSum(float val) {
 
 __device__ float blockReduceSum(float val) {
     int numWarps = (blockDim.x + warpSize - 1) / warpSize;
-    const int MAX_WARPS = 32; // supports up to 1024 threads per block (1024/32 = 32 warps)
+    const int MAX_WARPS = 32; 
     __shared__ float warpSums[MAX_WARPS];
 
     int lane = threadIdx.x % warpSize;
@@ -58,8 +58,20 @@ __global__ void reduceFinalKernel(float* __restrict__ data, int size) {
 }
 
 void reduceSum(const float* input, float* output, int size) {
+    
+    int deviceCount = 0;
+    cudaGetDeviceCount(&deviceCount);
+    
+    int numsms = 0;
+    cudaDeviceProp prop;
+    cudaGetDeviceProperties(&prop, 0);
+    numsms = prop.multiProcessorCount;
+
     int blockSize = 256;
-    int numBlocks = (size + blockSize - 1) / blockSize;
+    int numBlocks = numsms * 2; // 2 blocks per SM for good occupancy
+    if (numBlocks > (size + blockSize - 1) / blockSize) {
+        numBlocks = (size + blockSize - 1) / blockSize;
+    }
 
     cudaEvent_t startK1, stopK1, startK2, stopK2;
     cudaEventCreate(&startK1);
