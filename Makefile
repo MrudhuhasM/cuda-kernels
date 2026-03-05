@@ -2,11 +2,12 @@ NVCC     := nvcc
 CXXFLAGS := -std=c++14 -O2
 INCLUDE  := -I reduction/include
 SRCS     := reduction/reduction.cu reduction/main.cpp
-TARGET      := reduction_out
-TEST_TARGET := test_reduction_out
+TARGET       := reduction_out
+TEST_TARGET  := test_reduction_out
 BENCH_TARGET := bench_reduction_out
+CUB_TARGET   := bench_cub_out
 
-.PHONY: all build run test bench clean
+.PHONY: all build run test bench bench-cub clean
 
 all: build
 
@@ -24,6 +25,10 @@ bench:
 	$(NVCC) $(CXXFLAGS) reduction/reduction.cu reduction/bench_reduction.cu $(INCLUDE) -o $(BENCH_TARGET)
 	./$(BENCH_TARGET)
 
+bench-cub:
+	$(NVCC) $(CXXFLAGS) reduction/bench_cub.cu $(INCLUDE) -o $(CUB_TARGET)
+	./$(CUB_TARGET)
+
 clean:
-	rm -f $(TARGET) $(TEST_TARGET) $(BENCH_TARGET)
+	rm -f $(TARGET) $(TEST_TARGET) $(BENCH_TARGET) $(CUB_TARGET)
 
